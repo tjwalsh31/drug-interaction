@@ -41,7 +41,7 @@ def parse_interactions(explanation):
         # No interactions found
         return [{"severity": "info", "interaction": "", "what": "", "risks": "", "advice": "", "message": explanation.strip()}]
     interactions = []
-    blocks = re.split(r"\n?\*\*Interaction", explanation)
+    blocks = re.split(r"\n\*\*Interaction", explanation)   
     for block in blocks:
         block = block.strip()
         if not block:
@@ -122,7 +122,7 @@ if st.button("Check Interactions"):
     if meds_input:
         # Split and clean input
         meds = [m.strip() for m in meds_input.split(",") if m.strip()]
-        with st.spinner("Contacting AI for drug interaction explanation..."):
+        with st.spinner("Contacting your pharmacist..."):
             try:
                 response = requests.post(API_URL, json={"medications": meds})
                 if response.status_code == 200:
