@@ -84,30 +84,42 @@ def parse_interactions(explanation):
 def parse_drug_info(explanation):
     """
     Parse the drug information text into structured sections.
+    This function now handles multi-line sections properly.
     """
     explanation = explanation.replace(r"\*\*", "**")
-    sections = re.split(r"\n", explanation)
+    
+    # Initialize the drug info dictionary
     drug_info = {"description": "", "uses": "", "side_effects": "", "dosage": "", "names": "", "pregnancy": "", "personalized_dose": ""}
     
-    for sec in sections:
-        sec = sec.strip()
-        if not sec:
-            continue
-        # Parse each section by its header
-        if sec.startswith("**Description**:"):
-            drug_info["description"] = re.sub(r"^\*\*Description\*\*: ?", "", sec).strip()
-        elif sec.startswith("**Uses**:"):
-            drug_info["uses"] = re.sub(r"^\*\*Uses\*\*: ?", "", sec).strip()
-        elif sec.startswith("**Side Effects**:"):
-            drug_info["side_effects"] = re.sub(r"^\*\*Side Effects\*\*: ?", "", sec).strip()
-        elif sec.startswith("**Dosage**:"):
-            drug_info["dosage"] = re.sub(r"^\*\*Dosage\*\*: ?", "", sec).strip()
-        elif sec.startswith("**Names**:"):
-            drug_info["names"] = re.sub(r"^\*\*Names\*\*: ?", "", sec).strip()
-        elif sec.startswith("**Pregnancy**:"):
-            drug_info["pregnancy"] = re.sub(r"^\*\*Pregnancy\*\*: ?", "", sec).strip()
-        elif sec.startswith("**Personalized Dose**:"):
-            drug_info["personalized_dose"] = re.sub(r"^\*\*Personalized Dose\*\*: ?", "", sec).strip()
+    # Split by double asterisk headers
+    sections = re.split(r'\*\*(Description|Uses|Side Effects|Dosage|Names|Pregnancy|Personalized Dose)\*\*:', explanation)
+    
+    # Process the sections
+    for i in range(1, len(sections), 2):
+        if i + 1 < len(sections):
+            section_name = sections[i].lower().replace(" ", "_")
+            section_content = sections[i + 1].strip()
+            
+            # Clean up the content - remove extra newlines but keep paragraph structure
+            section_content = re.sub(r'\n\s*\n', ' ', section_content)
+            section_content = re.sub(r'\n', ' ', section_content)
+            section_content = section_content.strip()
+            
+            # Map section names to our dictionary keys
+            if section_name == "description":
+                drug_info["description"] = section_content
+            elif section_name == "uses":
+                drug_info["uses"] = section_content
+            elif section_name == "side_effects":
+                drug_info["side_effects"] = section_content
+            elif section_name == "dosage":
+                drug_info["dosage"] = section_content
+            elif section_name == "names":
+                drug_info["names"] = section_content
+            elif section_name == "pregnancy":
+                drug_info["pregnancy"] = section_content
+            elif section_name == "personalized_dose":
+                drug_info["personalized_dose"] = section_content
     
     return drug_info
 
@@ -214,20 +226,27 @@ with tab2:
     
     col1, col2 = st.columns(2)
     with col1:
-        height = st.number_input("Height (cm)", min_value=100, max_value=250, value=170, step=1)
+        height_feet = st.number_input("Height (feet)", min_value=3, max_value=8, value=5, step=1)
+        height_inches = st.number_input("Height (inches)", min_value=0, max_value=11, value=7, step=1)
         is_pregnant = st.checkbox("Are you pregnant?")
     
     with col2:
-        weight = st.number_input("Weight (kg)", min_value=30, max_value=200, value=70, step=1)
+        weight = st.number_input("Weight (lbs)", min_value=66, max_value=440, value=154, step=1)
         age = st.number_input("Age (years)", min_value=1, max_value=120, value=30, step=1)
 
     if st.button("Get Drug Information", key="drug_info_btn"):
         if drug_input:
+            # Convert imperial to metric for backend calculations
+            height_cm = (height_feet * 12 + height_inches) * 2.54
+            weight_kg = weight * 0.453592
+            
             personal_info = {
-                "height": height,
-                "weight": weight,
+                "height": height_cm,
+                "weight": weight_kg,
                 "age": age,
-                "is_pregnant": is_pregnant
+                "is_pregnant": is_pregnant,
+                "height_display": f"{height_feet}'{height_inches}\"",
+                "weight_display": f"{weight} lbs"
             }
             
             with st.spinner("Gathering pharmaceutical information..."):
@@ -240,18 +259,37 @@ with tab2:
                         explanation = response.json().get("explanation", "")
                         st.markdown("### Drug Information")
                         
+                        # Debug: Show raw response (you can remove this later)
+                        with st.expander("Debug: Raw API Response"):
+                            st.text(explanation)
+                        
                         drug_info = parse_drug_info(explanation)
                         
-                        # Display each section with icons
-                        format_drug_info_section("Description", drug_info["description"], "📋")
-                        format_drug_info_section("Medical Uses", drug_info["uses"], "🎯")
-                        format_drug_info_section("Generic & Brand Names", drug_info["names"], "🏷️")
-                        format_drug_info_section("Standard Dosage", drug_info["dosage"], "💊")
-                        format_drug_info_section("Personalized Dosage Recommendation", drug_info["personalized_dose"], "👤")
-                        format_drug_info_section("Common Side Effects", drug_info["side_effects"], "⚠️")
+                        # Debug: Show parsed sections (you can remove this later)
+                        with st.expander("Debug: Parsed Sections"):
+                            st.json(drug_info)
+                        
+                        # Display each section with icons - only show if content exists
+                        if drug_info["description"]:
+                            format_drug_info_section("Description", drug_info["description"], "📋")
+                        if drug_info["uses"]:
+                            format_drug_info_section("Medical Uses", drug_info["uses"], "🎯")
+                        if drug_info["names"]:
+                            format_drug_info_section("Generic & Brand Names", drug_info["names"], "🏷️")
+                        if drug_info["dosage"]:
+                            format_drug_info_section("Standard Dosage", drug_info["dosage"], "💊")
+                        if drug_info["personalized_dose"]:
+                            format_drug_info_section("Personalized Dosage Recommendation", drug_info["personalized_dose"], "👤")
+                        if drug_info["side_effects"]:
+                            format_drug_info_section("Common Side Effects", drug_info["side_effects"], "⚠️")
                         
                         if is_pregnant and drug_info["pregnancy"]:
                             format_drug_info_section("Pregnancy Considerations", drug_info["pregnancy"], "🤱")
+                        
+                        # Fallback: if no sections were parsed, show raw response
+                        if not any(drug_info.values()):
+                            st.warning("Unable to parse response into sections. Showing raw response:")
+                            st.text(explanation)
                             
                     else:
                         st.error(f"API error: {response.text}")

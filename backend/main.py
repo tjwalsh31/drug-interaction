@@ -81,12 +81,16 @@ Begin when ready.
     return prompt
 
 def build_drug_info_prompt(medication: str, personal_info: Dict[str, Any]) -> str:
-    height = personal_info.get("height", 170)
-    weight = personal_info.get("weight", 70)
+    height_cm = personal_info.get("height", 170)
+    weight_kg = personal_info.get("weight", 70)
     age = personal_info.get("age", 30)
     is_pregnant = personal_info.get("is_pregnant", False)
     
-    bmi = weight / ((height / 100) ** 2)
+    # Get display values if available (imperial), otherwise convert from metric
+    height_display = personal_info.get("height_display", f"{height_cm:.0f} cm")
+    weight_display = personal_info.get("weight_display", f"{weight_kg:.0f} kg")
+    
+    bmi = weight_kg / ((height_cm / 100) ** 2)
     pregnancy_text = "The patient is currently pregnant." if is_pregnant else "The patient is not pregnant."
     
     prompt = f"""
@@ -96,8 +100,8 @@ The patient is asking about: {medication}
 
 Patient information:
 - Age: {age} years
-- Height: {height} cm
-- Weight: {weight} kg
+- Height: {height_display}
+- Weight: {weight_display}
 - BMI: {bmi:.1f}
 - {pregnancy_text}
 
