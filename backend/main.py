@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import os
 import openai
 from dotenv import load_dotenv
-from typing import List
+from typing import List, Dict, Any
 import requests
 import re
 
@@ -15,6 +15,10 @@ app = FastAPI()
 
 class MedsRequest(BaseModel):
     medications: List[str]
+
+class DrugInfoRequest(BaseModel):
+    medication: str
+    personal_info: Dict[str, Any]  # height, weight, age, is_pregnant
 
 def get_rxcui(drug_name):
     """Get RxCUI code for a given drug"""
@@ -76,6 +80,60 @@ Begin when ready.
 """
     return prompt
 
+def build_drug_info_prompt(medication: str, personal_info: Dict[str, Any]) -> str:
+    height = personal_info.get("height", 170)
+    weight = personal_info.get("weight", 70)
+    age = personal_info.get("age", 30)
+    is_pregnant = personal_info.get("is_pregnant", False)
+    
+    bmi = weight / ((height / 100) ** 2)
+    pregnancy_text = "The patient is currently pregnant." if is_pregnant else "The patient is not pregnant."
+    
+    prompt = f"""
+You are a licensed clinical pharmacist providing comprehensive drug information to a patient.
+
+The patient is asking about: {medication}
+
+Patient information:
+- Age: {age} years
+- Height: {height} cm
+- Weight: {weight} kg
+- BMI: {bmi:.1f}
+- {pregnancy_text}
+
+Please provide detailed pharmaceutical information in the following format:
+
+**Description**: {{Brief description of what this medication is and its drug class}}
+
+**Uses**: {{What conditions this medication treats, primary and secondary uses}}
+
+**Names**: {{List common generic names and popular brand names}}
+
+**Dosage**: {{Standard adult dosing guidelines, frequency, and administration notes}}
+
+**Personalized Dose**: {{Based on the patient's age, weight, and BMI, provide personalized dosage recommendations. Consider any adjustments needed for their specific demographics. Mention if weight-based dosing is used for this medication.}}
+
+**Side Effects**: {{Common side effects patients should be aware of, organized by frequency (very common, common, uncommon)}}
+
+{f"**Pregnancy**: {{Safety information for pregnancy, FDA pregnancy category if known, risks to mother and fetus, alternative medications if this drug should be avoided}}" if is_pregnant else ""}
+
+Guidelines:
+1. Use simple, patient-friendly language
+2. Be specific about dosages but always remind to follow doctor's instructions
+3. Focus on practical information patients need to know
+4. If the medication name is unclear or unknown, mention this
+5. Always emphasize consulting healthcare providers for personalized advice
+6. For personalized dosing, consider renal function, hepatic function, and age-related changes
+7. Mention if the dose should be adjusted for elderly patients (age > 65)
+
+Do not use extra Markdown, code blocks, or HTML. Keep the format strict and consistent.
+
+Capitalize the first letter of the medication name.
+
+Begin when ready.
+"""
+    return prompt
+
 def uppercase_severity(text):
     # Replace '**Severity**: value' with uppercase value
     def repl(match):
@@ -90,6 +148,13 @@ def capitalize_medications(text):
         drugs_cap = ' + '.join([d.strip().capitalize() for d in drugs.split('+')])
         return f"**Interaction {match.group(1)}**: {drugs_cap}"
     return re.sub(r"\*\*Interaction (\d+)\*\*: ([^\n]+)", repl, text)
+
+def clean_drug_info_response(text):
+    """Clean and format the drug information response"""
+    # Remove extra blank lines, ensure consistent formatting
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r" +", " ", text)
+    return text.strip()
 
 @app.post("/interactions")
 async def get_interactions(request: MedsRequest):
@@ -116,3 +181,27 @@ async def get_interactions(request: MedsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/drug-info")
+async def get_drug_info(request: DrugInfoRequest):
+    prompt = build_drug_info_prompt(request.medication, request.personal_info)
+
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful clinical pharmacist providing comprehensive drug information."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=800,
+            temperature=0.3  # Lower temperature for more consistent, factual information
+        )
+        answer = response.choices[0].message.content.strip()
+        answer = clean_drug_info_response(answer)
+        return {"explanation": answer}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+async def root():
+    return {"message": "Drug Information & Interaction API is running"}
