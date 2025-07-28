@@ -53,7 +53,7 @@ Your job is to:
 5. If any medication name is unclear or unknown, politely mention it and recommend verifying with a healthcare professional.
 6. USE RXCUIS API FOR ACCURACY.
 
-Format the response STRICTLY like this
+Format the response STRICTLY like this :
 
 **Interaction 1**: {{Drug A}} + {{Drug B}}
 
@@ -70,42 +70,26 @@ If there are no known interactions, respond with:
 
 Do not use extra Markdown, code blocks, or HTML. Do not add extra whitespace or blank lines. Do not use bullet points. Keep the format strict and consistent.
 
+You must capitalize the first letter of each medication.
+
 Begin when ready.
 """
     return prompt
 
-def titlecase_severity(text):
-    # Replace '**Severity**: value' with Title Case value
+def uppercase_severity(text):
+    # Replace '**Severity**: value' with uppercase value
     def repl(match):
-        return f"**Severity**: {match.group(1).capitalize()}"
+        return f"**Severity**: {match.group(1).upper()}"
     return re.sub(r"\*\*Severity\*\*: (mild|moderate|severe|unknown)", repl, text, flags=re.IGNORECASE)
 
-def titlecase_drug_names(text):
-    # Title case drug names in '**Interaction N**: Drug A + Drug B' line
+def capitalize_medications(text):
+    # Capitalize the first letter of each medication in '**Interaction N**: ...' line
     def repl(match):
         drugs = match.group(2)
-        # Split by +, strip, title case each drug
-        drugs_tc = ' + '.join([d.strip().title() for d in drugs.split('+')])
-        return f"**Interaction {match.group(1)}**: {drugs_tc}"
+        # Split by +, strip, capitalize first letter of each drug
+        drugs_cap = ' + '.join([d.strip().capitalize() for d in drugs.split('+')])
+        return f"**Interaction {match.group(1)}**: {drugs_cap}"
     return re.sub(r"\*\*Interaction (\d+)\*\*: ([^\n]+)", repl, text)
-
-def format_sections(text):
-    # Ensure each section starts on a new line with double newlines between sections
-    # This will help frontend split and render each part cleanly
-    # List of section headers to enforce spacing
-    headers = [
-        r"\*\*Interaction \d+\*\*:",
-        r"\*\*Severity\*\*: ",
-        r"\*\*What happens\*\*: ",
-        r"\*\*Risks or symptoms\*\*: ",
-        r"\*\*Advice\*\*: "
-    ]
-    # Add double newline before each header except the first
-    for h in headers[1:]:
-        text = re.sub(h, f"\n\n{h}", text)
-    # Remove any triple or more newlines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text
 
 @app.post("/interactions")
 async def get_interactions(request: MedsRequest):
@@ -123,10 +107,10 @@ async def get_interactions(request: MedsRequest):
         )
         answer = response.choices[0].message.content.strip()
         # Post-process: remove extra blank lines, ensure double newlines between sections
+        answer = re.sub(r"\n{3,}", "\n\n", answer)
         answer = re.sub(r" +", " ", answer)
-        answer = titlecase_severity(answer)
-        answer = titlecase_drug_names(answer)
-        answer = format_sections(answer)
+        answer = uppercase_severity(answer)
+        answer = capitalize_medications(answer)
         return {"explanation": answer}
 
     except Exception as e:

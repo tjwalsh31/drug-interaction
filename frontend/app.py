@@ -28,6 +28,13 @@ API_URL = "http://localhost:8000/interactions"
 
 st.title("Drug Interaction Explainer")
 
+# --- Disclaimer ---
+st.markdown("""
+<div style='background:#fff3cd; border-left:6px solid #f9a825; padding:12px 18px; border-radius:8px; margin-bottom:18px; color:#222;'>
+<b>Disclaimer:</b> This is not medical advice from a doctor. Always consult your doctor before taking any medications.
+</div>
+""", unsafe_allow_html=True)
+
 # --- Helper Functions ---
 def parse_interactions(explanation):
     """
